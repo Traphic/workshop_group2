@@ -1,0 +1,95 @@
+﻿@page "/categories"
+@using Blog.BlazorServer.ViewModels
+@using Blog.BlazorServer.Components.Shared
+@using Blog.BlazorServer.Clients.Interfaces
+@inject ICategoryClient CategoryClient
+
+ <AuthorizeView>
+    <Authorized>
+        <div class="category-controls">
+            <Button Color="ButtonColor.Primary" @onclick="OnShowCreateModalClick">Add new category </Button>
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@if (categories.Any())
+{
+    <CategoryGrid Categories="@categories" Edit="HandleEditCategory" Delete="HandleDeleteCategory" />
+}
+else
+{
+    <div class="text-center">
+        <p>No categories to display.</p>
+    </div>
+}
+<SharedModal @ref="deleteConfirmModal" Title="Are you sure you want to delete the category?" OnConfirmClick="DeleteCategory">
+    Category <em>@categoryToDelete.Name</em> would be permanently deleted from the database.
+</SharedModal>
+
+<CategoryModal @ref="categoryModal" OnSave="HandleSaveCategory" />
+
+@code {
+    [Inject] protected ToastService ToastService { get; set; }
+    [Inject] protected PreloadService PreloadService { get; set; }
+
+    List<CategoryViewModel> categories = new List<CategoryViewModel>();
+    CategoryViewModel categoryToDelete = new();
+
+    private SharedModal deleteConfirmModal { get; set; }
+    private CategoryModal categoryModal { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UpdateCategoryList();
+    }
+
+    private async Task HandleDeleteCategory(int categoryId)
+    {
+        categoryToDelete = categories.FirstOrDefault(c => c.Id == categoryId);
+        deleteConfirmModal.Open();
+    }
+
+    private async Task HandleEditCategory(CategoryViewModel category)
+    {
+        categoryModal.CategoryModel = category;
+        categoryModal.IsEdit = true;
+        categoryModal.Open();
+    }
+
+    private async Task DeleteCategory()
+    {
+        var response = await CategoryClient.DeleteAsync(categoryToDelete.Id);
+        if (response.IsSuccessStatusCode)
+        {
+            ToastService.Notify(new(ToastType.Success, "Category deleted successfully"));
+        }
+        else
+        {
+            var errorMessage = $"Failed to delete category. Status code: {response.StatusCode}";
+            ToastService.Notify(new(ToastType.Danger, errorMessage));
+            return;
+        }
+
+        categories.Remove(categoryToDelete);
+        categoryToDelete = new();
+        deleteConfirmModal.Close();
+    }
+
+    private void OnShowCreateModalClick()
+    {
+        categoryModal.IsEdit = false;
+        categoryModal.Open();
+    }
+
+    private async Task HandleSaveCategory()
+    {
+        await UpdateCategoryList();
+    }
+
+    private async Task UpdateCategoryList()
+    {
+        PreloadService.Show();
+        categories = await CategoryClient.GetAllAsync();
+        PreloadService.Hide();
+    }
+}

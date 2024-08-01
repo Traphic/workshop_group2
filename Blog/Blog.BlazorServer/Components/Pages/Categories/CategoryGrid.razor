@@ -1,0 +1,49 @@
+﻿@using Blog.BlazorServer.ViewModels
+@inherits ComponentBase
+
+<table class="table table-striped table-hover" style="max-width: 800px;">
+    <thead class="thead-dark">
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var category in Categories)
+        {
+            <tr>
+                <td>@category.Id</td>
+                <td>@category.Name</td>
+                <td style="max-width: 70px;">
+                    <AuthorizeView>
+                        <Authorized>
+                            <Button Color="ButtonColor.Primary" @onclick="() => EditCategory(category)" Style="margin-right: 2px">Update </Button>             
+                        </Authorized>
+                    </AuthorizeView>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    [Parameter]
+    public List<CategoryViewModel> Categories { get; set; }
+
+    [Parameter]
+    public EventCallback<CategoryViewModel> Edit { get; set; }
+
+    [Parameter]
+    public EventCallback<int> Delete { get; set; }
+
+    private async Task EditCategory(CategoryViewModel category)
+    {
+        await Edit.InvokeAsync(category);
+    }
+
+    private async Task DeleteCategory(int categoryId)
+    {
+        await Delete.InvokeAsync(categoryId);
+    }
+}

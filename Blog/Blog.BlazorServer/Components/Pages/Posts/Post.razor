@@ -1,0 +1,168 @@
+﻿@page "/post/{postId}"
+@using Blog.BlazorServer.ViewModels
+@using Blog.BlazorServer.Components.Shared
+@using Blog.BlazorServer.Clients.Interfaces
+@using System.Text.Json
+@using System.Web
+@using System.Text.RegularExpressions;
+@inject IPostClient PostClient
+
+@if (LoadedPost != null)
+{
+    <div class="post-page">
+        <div>
+            <div class="post-info-panel">
+                <div class="post-changed-info">
+                    <span class="post-info-icon"><Icon Name="IconName.Calendar" /></span>
+                    <span class="post-info-data">@LoadedPost.CreatedDate</span>
+                    <span class="post-info-icon"><Icon Name="IconName.Person" /></span>
+                    <span class="post-info-data">@LoadedPost.CreatedBy</span>
+                    @if (isEdited)
+                    {
+                        <span class="post-info">
+                            <em>(Edited by @LoadedPost.UpdatedBy - @LoadedPost.UpdatedDate)</em>
+                        </span>
+                    }
+                </div>
+                <div>
+                 <AuthorizeView >
+                    <Authorized>
+                            <Button Color="ButtonColor.Primary" @onclick="() => postModal.Open()">Edit post </Button>
+                    </Authorized>
+                </AuthorizeView>
+                <AuthorizeView>
+                    <Authorized>
+                            <Button Color="ButtonColor.Danger" Outline="true" @onclick="() => deleteConfirmModal.Open()">Delete post</Button>
+                    </Authorized>
+                </AuthorizeView>
+                </div>
+            </div>
+            <h1>@LoadedPost.Title</h1>
+
+            <div class="entry-content">
+                <div class="image-container" style="max-width: 400px;">
+                    <img class="post-img" src="/Images/@(!string.IsNullOrEmpty(LoadedPost.Image) ? LoadedPost.Image : "placeholder.png")" alt="placeholder" />
+                </div>
+                <div class="post-content">
+                    @((MarkupString)Regex.Replace(
+                        HttpUtility.HtmlEncode(@LoadedPost.Content), "\r?\n|\r", "<br />"))
+                </div>
+@*                 <div class="post-content">@LoadedPost.Content</div> *@    
+            </div>
+            @if (LoadedPost.CategoryDTOs != null && LoadedPost.CategoryDTOs.Any())
+            {
+                <div class="mb-3">
+                    <div class="selected-categories">
+                        @foreach (var selectedCategory in LoadedPost.CategoryDTOs)
+                        {
+                            <Badge Color="BadgeColor.Primary" Style="margin-right: 3px">@selectedCategory.Name</Badge>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+        <CommentSection Comments="@LoadedPost.CommentDTOs" PostId="@LoadedPost.Id" />
+    </div>
+    <PostModal @ref="postModal" PostModel="LoadedPost" IsEdit="true" OnSave="HandleEditPost" />
+    <SharedModal @ref="deleteConfirmModal" Title="Are you sure you want to delete the post?" OnConfirmClick="DeletePost">
+        Post would be permanently deleted from the database.
+    </SharedModal>
+}
+
+@code {
+    [Inject] protected ToastService ToastService { get; set; }
+    [Inject] protected PreloadService PreloadService { get; set; }
+
+    [Parameter]
+    public string PostId { get; set; }
+
+    private PostViewModel LoadedPost { get; set; }
+
+    private PostModal postModal { get; set; }
+
+    private SharedModal deleteConfirmModal { get; set; }
+
+    bool isEdited { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(PostId) && int.TryParse(PostId, out int Id))
+        {
+            await GetPostById();
+
+            if (LoadedPost is not null)
+            {
+                isEdited = LoadedPost.UpdatedDate is not null;
+            }
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/404");
+        }
+    }
+
+    private void OnShowPostModalClick()
+    {
+        postModal.Open();
+    }
+
+    private async Task HandleEditPost()
+    {
+        await ReloadPost();
+        isEdited = true;
+    }
+
+    private async Task ReloadPost()
+    {
+        await GetPostById();
+    }
+
+    private async void DeletePost()
+    {
+        PreloadService.Show();
+
+        var response = await PostClient.DeleteAsync(LoadedPost.Id);
+
+        if (response.IsSuccessStatusCode)
+        {
+            NavigationManager.NavigateTo("/");
+            ToastService.Notify(new(ToastType.Success, "Post deleted successfully"));
+        }
+        else
+        {
+            var errorMessage = $"Failed to delete post. Status code: {response.StatusCode}";
+            ToastService.Notify(new(ToastType.Danger, errorMessage));
+        }
+
+        PreloadService.Hide();
+     
+    }
+
+    private async Task GetPostById()
+    {
+        PreloadService.Show();
+        int.TryParse(PostId, out int Id);
+
+        var response = await PostClient.GetByIdAsync(Id);
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            LoadedPost = JsonSerializer.Deserialize<PostViewModel>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+        }
+        else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            NavigationManager.NavigateTo("/404");
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/");
+            var errorMessage = $"Failed to open the post. Status code: {response.StatusCode}";
+            ToastService.Notify(new(ToastType.Danger, errorMessage));
+        }
+
+        PreloadService.Hide();
+    }
+}

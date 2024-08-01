@@ -1,0 +1,122 @@
+﻿@using Blog.BlazorServer.ViewModels
+@using Blog.BlazorServer.Components.Shared
+@using Blog.BlazorServer.Clients.Interfaces
+@inject ICommentClient CommentClient
+
+<div class="comment-section">
+    <div class="comments">
+        <h5>Comments:</h5>
+        @if (Comments != null && Comments.Any())
+        {
+            @foreach (var comment in Comments)
+            {
+                <div class="comment">
+                    <div class="comment-header">
+                        <div>
+                            <strong>@comment.CreatedBy</strong> - <em>@comment.CreatedDate</em>
+                        </div>
+                        <div>
+                            <AuthorizeView Roles="Admin">
+                                <Authorized>
+                                    <Button Color="ButtonColor.Danger" Outline="true" @onclick="() => HandleDeleteComment(comment)">Delete </Button>
+                                </Authorized>
+                            </AuthorizeView>
+                        </div>
+                    </div>
+                    <div class="comment-body">
+                        @comment.Text
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+        <p>No comments yet.</p>
+        }
+    </div>
+    <div class="new-comment mb-3">
+         <AuthorizeView>
+             <Authorized>
+                <EditForm Context="formContext" Model="@CommentModel" OnValidSubmit="AddComment">
+                    <div class="comment-form">
+                        <DataAnnotationsValidator />
+                        <div>
+                            <label for="commentText" class="form-label"> Add a Comment <span style="color: red;">*</span></label>
+                            <InputTextArea id="commentText" class="form-control" @bind-Value="@CommentModel.Text" />
+                            <ValidationMessage For="@(() => CommentModel.Text)" />
+                        </div>
+                        <button type="submit" class="btn btn-primary" disabled="@(!formContext.Validate() || !formContext.IsModified())">Save</button>
+                    </div>
+                </EditForm>
+             </Authorized>
+             <NotAuthorized>
+                <p><em>Login to the website to be able to leave comments.</em></p>
+             </NotAuthorized>
+         </AuthorizeView>
+    </div>
+</div>
+<SharedModal @ref="deleteConfirmModal" Title="Are you sure you want to delete the comment?" OnConfirmClick="DeleteComment">
+    Post would be permanently deleted from the database.
+</SharedModal>
+
+@code {
+    [Inject] protected ToastService ToastService { get; set; }
+
+    [Parameter]
+    public List<CommentViewModel> Comments { get; set; }
+
+    [Parameter]
+    public int PostId { get; set; }
+
+    CommentViewModel CommentModel = new CommentViewModel();
+
+    private SharedModal deleteConfirmModal { get; set; }
+
+    CommentViewModel commentToDelete = new CommentViewModel();
+
+    private async Task HandleDeleteComment(CommentViewModel comment)
+    {
+        commentToDelete = comment;
+        deleteConfirmModal.Open();
+    }
+
+    private async Task AddComment()
+    {
+        CommentModel.PostId = PostId;
+
+        var response = await CommentClient.AddAsync(CommentModel);
+
+        if (response.IsSuccessStatusCode)
+        {
+            ToastService.Notify(new(ToastType.Success, "Comment added successfully"));
+            CommentModel = new CommentViewModel();
+        }
+        else
+        {
+            var errorMessage = $"Failed to add comment. Status code: {response.StatusCode}";
+            ToastService.Notify(new(ToastType.Danger, errorMessage));
+            return;
+        }
+    }
+
+
+    private async Task DeleteComment()
+    {
+        var response = await CommentClient.DeleteAsync(commentToDelete.Id);
+
+        if (response.IsSuccessStatusCode)
+        {
+            ToastService.Notify(new(ToastType.Success, "Comment deleted successfully"));
+        }
+        else
+        {
+            var errorMessage = $"Failed to delete comment. Status code: {response.StatusCode}";
+            ToastService.Notify(new(ToastType.Danger, errorMessage));
+            return;
+        }
+
+        Comments.Remove(commentToDelete);
+        commentToDelete = new();
+        deleteConfirmModal.Close();      
+    }
+}

@@ -1,0 +1,197 @@
+﻿@using Blog.BlazorServer.ViewModels
+@using Blog.BlazorServer.Components.Shared
+@using Blog.BlazorServer.Clients.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+@inject ICategoryClient CategoryClient
+@inject IPostClient PostClient
+@inject IWebHostEnvironment WebHostEnvironment
+
+
+<SharedFormModal @ref="modal" Model="@PostModel" Title="Add New Post" OnSave="SavePost">
+    <div class="mb-3">
+        <label for="postTitle" class="form-label">Post Title <span style="color: red;">*</span></label>
+        <InputText id="postTitle" class="form-control" @bind-Value="@PostModel.Title" />
+        <ValidationMessage For="@(() => PostModel.Title)" />
+    </div>
+    <div class="mb-3">
+        <label for="postImage" class="form-label">Post Image</label>
+        <InputFile id="postImage" OnChange="HandleImageUpload" />
+    </div>
+    <div class="mb-3">
+        <label for="postContent" class="form-label">Post Content <span style="color: red;">*</span></label>
+        <InputTextArea id="postContent" class="form-control" @bind-Value="@PostModel.Content" />
+        <ValidationMessage For="@(() => PostModel.Content)" />
+    </div>
+    <div class="mb-3">
+        <label for="postCategories" class="form-label">Add new category</label>
+        <InputSelect id="postCategories" class="form-select" 
+            ValueExpression="@(()=>SelectedCategoryId)" 
+            Value="@SelectedCategoryId" 
+            ValueChanged="@((int value) => SelectCategory(value))">
+                <option value="-1" selected> - </option>
+                @foreach (var category in Categories)
+                {
+                    <option value="@category.Id">@category.Name</option>
+                }
+        </InputSelect>
+    </div>
+
+    @if (SelectedCategories != null && SelectedCategories.Any())
+    {
+        <div class="mb-3">
+            <label>Selected Categories <em>(Click to remove)</em>:</label>
+            <div class="selected-categories">
+                @foreach (var selectedCategory in SelectedCategories)
+                {
+                    <Badge Color="BadgeColor.Primary" Style="margin-right: 3px" @onclick="() => RemoveCategory(selectedCategory)">@selectedCategory.Name</Badge>
+                }
+            </div>
+        </div>
+    }
+</SharedFormModal>
+
+@code {
+    [Inject] protected ToastService ToastService { get; set; }
+    [Inject] protected PreloadService PreloadService { get; set; }
+
+    [Parameter]
+    public PostViewModel PostModel { get; set; } 
+
+    [Parameter]
+    public bool IsEdit { get; set; }
+
+    [Parameter]
+    public EventCallback OnSave { get; set; }
+
+    private SharedFormModal<PostViewModel> modal { get; set; }
+
+    private IBrowserFile UploadedFile { get; set; }
+
+    long maxFileSize = 1024 * 1024 * 3;
+
+    List<CategoryViewModel> Categories { get; set; } = new List<CategoryViewModel>();
+    List<CategoryViewModel> SelectedCategories { get; set; } = new List<CategoryViewModel>();
+    private int SelectedCategoryId { get; set; } = -1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Categories = await CategoryClient.GetAllAsync();
+
+        if (PostModel.Id != 0)
+        {
+            IsEdit = true;
+            Categories = Categories.Where(c => !PostModel.CategoryDTOs.Any(pc => pc.Id == c.Id)).ToList();
+
+            if (PostModel.CategoryDTOs.Any())
+            {
+                SelectedCategories = PostModel.CategoryDTOs;
+            }
+        }
+    }
+
+    private void SelectCategory(int categoryId)
+    {
+        if (categoryId != -1)
+        {
+            var categoryToAdd = Categories.FirstOrDefault(c => c.Id == categoryId);
+            SelectedCategories.Add(categoryToAdd);
+            Categories.Remove(categoryToAdd);
+        }
+    }
+
+    private void RemoveCategory(CategoryViewModel category)
+    {
+        SelectedCategories.Remove(category);
+        Categories.Add(category);
+    }
+
+    public void Open()
+    {
+        modal.Open();
+    }
+
+    public void Close()
+    {
+        SelectedCategoryId = -1;
+        SelectedCategories = new List<CategoryViewModel>();
+        Categories = new List<CategoryViewModel>();
+
+        modal.Close();
+    }
+
+    private async Task SavePost()
+    {
+        PreloadService.Show();
+
+        PostModel.CategoryDTOs = SelectedCategories;
+        await SaveFileToImagesFolder();
+        HttpResponseMessage response;
+
+        if (!IsEdit)
+        {
+            response = await PostClient.AddAsync(PostModel);
+        }
+        else
+        {
+            response = await PostClient.UpdateAsync(PostModel);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            await OnSave.InvokeAsync();
+            ToastService.Notify(new(ToastType.Success, $"Post is {(IsEdit ? "updated" : "created")} successfully"));
+            Close();
+        }
+        else
+        {
+            var errorMessage = $"Failed to {(IsEdit ? "update" : "create")} post. Status code: {response.StatusCode}";
+            ToastService.Notify(new(ToastType.Danger, errorMessage));
+        }
+
+        PreloadService.Hide();
+    }
+
+    private void HandleImageUpload(InputFileChangeEventArgs e)
+    {
+        UploadedFile = e.File;
+    }
+
+    private string GetModalTitle()
+    {
+        return IsEdit ? "Edit Category" : "Add New Category";
+    }
+
+    private async Task SaveFileToImagesFolder()
+    {
+        try
+        {
+            if (UploadedFile != null)
+            {
+                var targetFolder = Path.Combine(WebHostEnvironment.WebRootPath, "Images");
+
+                if (!Directory.Exists(targetFolder))
+                {
+                    Directory.CreateDirectory(targetFolder);
+                }
+
+                var fileName = $"{Guid.NewGuid()}{Path.GetExtension(UploadedFile.Name)}";
+
+                var filePath = Path.Combine(targetFolder, fileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await UploadedFile.OpenReadStream(maxFileSize).CopyToAsync(stream);
+                }
+
+                PostModel.Image = fileName;
+            }
+        }
+        catch (Exception ex)
+        {
+            PreloadService.Hide();
+            var errorMessage = $"{UploadedFile.Name} not uploaded: {ex.Message}";
+            ToastService.Notify(new(ToastType.Danger, errorMessage));
+        }
+    }
+
+}

@@ -1,0 +1,121 @@
+﻿@page "/"
+@using Blog.BlazorServer.ViewModels
+@using Blog.BlazorServer.Components.Shared
+@using Blog.BlazorServer.Clients.Interfaces
+@inject IPostClient PostClient
+@inject ICategoryClient CategoryClient
+
+
+<div class="post-controls row mb-4">
+    <div class="col-md-6">
+        <select class="form-select" @onchange="OnCategorySelected">
+            <option value="-1">All Categories</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </select>
+    </div>
+    <AuthorizeView>
+        <Authorized>
+            <div class="col-md-6">
+                <Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">Add new post </Button>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+<PostModal @ref="postModal" PostModel="new PostViewModel()" IsEdit="false" OnSave="HandleSaveNewPost" />
+
+<div class="row">
+    @foreach (var post in posts)
+    {
+        <div class="col-sm-3">
+            <div class="post-card card mb-4" style="height: 540px;">
+                <div class="card-img-wrapper">
+                    <div class="card-img-top" style="background-image: url('/Images/@(!string.IsNullOrEmpty(post.Image) ? post.Image : "placeholder.png")');"></div>
+                </div>
+                <div class="card-body" style="position: relative;">
+                    <h5 class="card-title">@post.Title</h5>
+                    <p class="card-text">@post.ContentPreview</p>
+                    @if (post.CategoryDTOs != null && post.CategoryDTOs.Any())
+                    {
+                        <div class="mb-3">
+                            <div class="selected-categories">
+                                @foreach (var category in post.CategoryDTOs)
+                                {
+                                    <Badge Color="BadgeColor.Primary" Style="margin-right: 3px">@category.Name</Badge>
+                                }
+                            </div>
+                        </div>
+                    }
+                    <button class="btn btn-dark card-more-btn" @onclick="() => NavigateToPost(post.Id)">More</button>
+                </div>
+                <div class="card-footer">
+                    <small class="text-muted">@post.LastEditedBy</small>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+
+
+
+@code {
+    [Inject] protected PreloadService PreloadService { get; set; }
+    [Inject] protected ToastService ToastService { get; set; }
+
+    List<PostListViewModel> posts = new List<PostListViewModel>();
+    List<CategoryViewModel> categories = new List<CategoryViewModel>();
+
+    private PostModal postModal { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        PreloadService.Show();
+        posts = await GetAllPosts();
+        categories = await GetAssignedCategories();
+
+        PreloadService.Hide();     
+    }
+
+    private void NavigateToPost(int postId)
+    {
+        NavigationManager.NavigateTo($"/post/{postId}");
+    }
+
+    private void OnShowModalClick()
+    {
+        postModal.Open();
+    }
+
+    private async Task HandleSaveNewPost()
+    {
+        posts = await GetAllPosts();
+        categories = await GetAssignedCategories();
+    }
+
+    private async Task OnCategorySelected(ChangeEventArgs e)
+    {
+        int categoryId = Convert.ToInt32(e.Value);
+        if (categoryId == -1)
+        {
+            posts = await GetAllPosts();
+        }
+        else
+        {
+            posts = await PostClient.GetAllByCategoryAsync(categoryId);
+        }
+    }
+
+    private async Task<List<PostListViewModel>> GetAllPosts()
+    {
+        return await PostClient.GetAllAsync();
+    }
+
+    private async Task<List<CategoryViewModel>> GetAssignedCategories()
+    {
+        return await CategoryClient.GetAssignedCategoriesAsync();
+    }
+}

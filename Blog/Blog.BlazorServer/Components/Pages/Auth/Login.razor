@@ -1,0 +1,56 @@
+﻿@page "/login"
+@using Blog.BlazorServer.States
+@using static Blog.BlazorServer.ViewModels.Responses.CustomResponses;
+@using Blog.BlazorServer.Clients.Interfaces
+@using Blog.BlazorServer.ViewModels
+@using Blog.BlazorServer.ViewModels.Auth
+@inject IAuthClient AuthService
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm Model="@LoginModel" OnValidSubmit="HandleLogin">
+                <div class="comment-form">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label for="commentText" class="form-label"> Enter Email <span style="color: red;">*</span></label>
+                        <InputText id="commentText" class="form-control" @bind-Value="@LoginModel.Email" />
+                        <ValidationMessage For="@(() => LoginModel.Email)" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="commentAuthor" class="form-label"> Enter Password <span style="color: red;">*</span></label>
+                        <InputText type="password" id="commentAuthor" class="form-control" @bind-Value="@LoginModel.Password" />
+                        <ValidationMessage For="@(() => LoginModel.Password)" />
+                    </div>
+                    <button type="submit" class="btn btn-primary" disabled="@(!context.Validate() || !context.IsModified())">Login</button>
+                </div>
+            </EditForm>
+         </div>
+     </div>
+ </div>
+
+@code {
+    [Inject] protected PreloadService PreloadService { get; set; }
+    [Inject] protected ToastService ToastService { get; set; }
+
+    public LoginViewModel LoginModel = new();
+
+    async Task HandleLogin()
+    {
+        PreloadService.Show();
+        LoginResponse response = await AuthService.LoginAsync(LoginModel);
+        PreloadService.Hide();
+
+        if (response.Flag)
+        {
+            ToastService.Notify(new(ToastType.Success, response.Message));
+            var customAuthStateProvider = (CustomAuthenticationStateProvider)AuthStateProvider;
+            customAuthStateProvider.UpdateAuthenticationState(response.JWTToken);
+            NavigationManager.NavigateTo("/");
+        }
+        else
+        {
+            ToastService.Notify(new(ToastType.Warning, response.Message));
+        }
+    }
+}

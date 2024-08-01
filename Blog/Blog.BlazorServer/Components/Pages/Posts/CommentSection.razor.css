@@ -1,0 +1,46 @@
+﻿.comment-section {
+    margin-top: 20px;
+}
+
+.reaction-container {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.comment-form {
+    width: 500px;
+}
+
+.comment {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.comment-header {
+    font-weight: bold;
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.comment-body {
+    margin-left: 20px;
+}
+
+.new-comment {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+    .new-comment textarea {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .new-comment input[type="text"] {
+        width: 100%;
+        margin-bottom: 10px;
+    }

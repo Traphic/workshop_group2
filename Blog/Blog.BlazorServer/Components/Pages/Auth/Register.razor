@@ -1,0 +1,66 @@
+﻿@page "/register"
+@using Blog.BlazorServer.ViewModels
+@using Blog.BlazorServer.ViewModels.Auth
+@using Blog.BlazorServer.States
+@using static Blog.BlazorServer.ViewModels.Responses.CustomResponses;
+@using Blog.BlazorServer.Clients.Interfaces
+@inject IAuthClient AuthService
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm Model="@RegisterModel" OnValidSubmit="HandleRegistration">
+                <div class="comment-form">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label for="commentText" class="form-label"> Enter Name <span style="color: red;">*</span></label>
+                        <InputText id="commentText" class="form-control" @bind-Value="@RegisterModel.Username" />
+                        <ValidationMessage For="@(() => RegisterModel.Username)" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="commentText" class="form-label"> Enter Email <span style="color: red;">*</span></label>
+                        <InputText id="commentText" class="form-control" @bind-Value="@RegisterModel.Email" />
+                        <ValidationMessage For="@(() => RegisterModel.Email)" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="commentAuthor" class="form-label"> Enter Password <span style="color: red;">*</span></label>
+                        <InputText type="password" id="commentAuthor" class="form-control" @bind-Value="@RegisterModel.Password" />
+                        <ValidationMessage For="@(() => RegisterModel.Password)" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="commentAuthor" class="form-label"> Confirm Password <span style="color: red;">*</span></label>
+                        <InputText type="password" id="commentAuthor" class="form-control" @bind-Value="@RegisterModel.ConfirmPassword" />
+                        <ValidationMessage For="@(() => RegisterModel.ConfirmPassword)" />
+                    </div>
+                    <button type="submit" class="btn btn-primary" disabled="@(!context.Validate() || !context.IsModified())">Register</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Inject] protected PreloadService PreloadService { get; set; }
+    [Inject] protected ToastService ToastService { get; set; }
+
+    public RegisterViewModel RegisterModel = new();
+
+    async Task HandleRegistration()
+    {
+        PreloadService.Show();
+        RegistrationResponse response = await AuthService.RegisterAsync(RegisterModel);
+        PreloadService.Hide();
+
+        if (response.Flag)
+        {
+            ToastService.Notify(new(ToastType.Success, response.Message));
+            RegisterModel = new();
+            NavigationManager.NavigateTo("/login");
+        }
+        else
+        {
+            ToastService.Notify(new(ToastType.Info, response.Message));
+        }
+
+    }
+}

@@ -1,0 +1,72 @@
+﻿@using Blog.BlazorServer.ViewModels
+@using Blog.BlazorServer.Components.Shared
+@using Blog.BlazorServer.Clients.Interfaces
+@inject ICategoryClient CategoryClient
+
+<SharedFormModal @ref="modal" Model="@CategoryModel" Title="@GetModalTitle()" OnSave="SaveCategory">
+    <div class="mb-3">
+        <label for="postTitle" class="form-label">Category Name<span style="color: red;">*</span></label>
+        <InputText id="postTitle" class="form-control" @bind-Value="@CategoryModel.Name" />
+        <ValidationMessage For="@(() => CategoryModel.Name)" />
+    </div>
+</SharedFormModal>
+
+@code {
+    [Inject] protected ToastService ToastService { get; set; }
+    [Inject] protected PreloadService PreloadService { get; set; }
+
+    public CategoryViewModel CategoryModel = new CategoryViewModel();
+
+    public bool IsEdit = false;
+
+    [Parameter]
+    public EventCallback OnSave { get; set; }
+
+    private SharedFormModal<CategoryViewModel> modal { get; set; }
+
+    public void Open()
+    {
+        modal.Open();
+    }
+
+    public void Close()
+    {
+        CategoryModel = new CategoryViewModel();
+        modal.Close();
+    }
+
+    private async Task SaveCategory()
+    {
+        PreloadService.Show();
+
+        HttpResponseMessage response;
+
+        if (!IsEdit)
+        {
+            response = await CategoryClient.AddAsync(CategoryModel);
+        }
+        else
+        {
+            response = await CategoryClient.UpdateAsync(CategoryModel);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            await OnSave.InvokeAsync();
+            ToastService.Notify(new(ToastType.Success, $"Category is {(IsEdit ? "updated" : "created")} successfully"));
+            Close();
+        }
+        else
+        {
+            var errorMessage = $"Failed to {(IsEdit ? "update" : "create")} category. Status code: {response.StatusCode}";
+            ToastService.Notify(new(ToastType.Danger, errorMessage));
+        }
+
+        PreloadService.Hide();
+    }
+
+    private string GetModalTitle()
+    {
+        return IsEdit ? "Edit Category" : "Add New Category";
+    }
+}
